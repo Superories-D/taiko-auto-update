@@ -174,6 +174,9 @@
       font-size: 13px;
       white-space: pre-wrap;
     }
+    .job-running {
+      color: var(--warn);
+    }
   </style>
 </head>
 <body>
@@ -189,29 +192,29 @@
         <div class="stats">
           <div class="stat">
             <span class="label">服务启动时间</span>
-            <span class="value">{{ state.started_at }}</span>
+            <span class="value" id="started-at">{{ state.started_at }}</span>
           </div>
           <div class="stat">
             <span class="label">运行中任务</span>
-            <span class="value">{{ state.current_job or "空闲" }}</span>
+            <span class="value {% if state.job_running %}job-running{% endif %}" id="current-job">{{ state.current_job or "空闲" }}</span>
           </div>
           <div class="stat">
             <span class="label">上次任务结果</span>
-            <span class="value {% if state.last_job_result == 'success' %}status-success{% elif state.last_job_result == 'failed' %}status-failed{% else %}status-idle{% endif %}">
+            <span class="value {% if state.last_job_result == 'success' %}status-success{% elif state.last_job_result == 'failed' %}status-failed{% else %}status-idle{% endif %}" id="last-job-result">
               {{ state.last_job_result or "未执行" }}
             </span>
           </div>
           <div class="stat">
             <span class="label">上次自动执行日期</span>
-            <span class="value">{{ state.last_auto_run_date or "未执行" }}</span>
+            <span class="value" id="last-auto-run-date">{{ state.last_auto_run_date or "未执行" }}</span>
           </div>
           <div class="stat">
             <span class="label">上次仓库同步</span>
-            <span class="value">{{ state.last_git_sync_at or "未执行" }}</span>
+            <span class="value" id="last-git-sync-at">{{ state.last_git_sync_at or "未执行" }}</span>
           </div>
           <div class="stat">
             <span class="label">仓库状态</span>
-            <span class="value">
+            <span class="value" id="repo-status">
               {% if repo_is_git %}
                 已就绪
               {% elif repo_exists %}
@@ -223,19 +226,19 @@
           </div>
           <div class="stat">
             <span class="label">服务器状态</span>
-            <span class="value {% if server_status.ok %}status-success{% else %}status-failed{% endif %}">
+            <span class="value {% if server_status.ok %}status-success{% else %}status-failed{% endif %}" id="server-status">
               {{ server_status.message }}
             </span>
           </div>
           <div class="stat">
             <span class="label">服务器歌曲数</span>
-            <span class="value">{{ server_status.song_count }}</span>
+            <span class="value" id="server-song-count">{{ server_status.song_count }}</span>
           </div>
         </div>
-        <p><strong>上次开始:</strong> {{ state.last_job_started_at or "未执行" }}</p>
-        <p><strong>上次结束:</strong> {{ state.last_job_finished_at or "未执行" }}</p>
-        <p><strong>最近错误:</strong> {{ state.last_error or "无" }}</p>
-        <div class="summary">{{ state.last_job_summary | tojson(indent=2) }}</div>
+        <p><strong>上次开始:</strong> <span id="last-job-started-at">{{ state.last_job_started_at or "未执行" }}</span></p>
+        <p><strong>上次结束:</strong> <span id="last-job-finished-at">{{ state.last_job_finished_at or "未执行" }}</span></p>
+        <p><strong>最近错误:</strong> <span id="last-error">{{ state.last_error or "无" }}</span></p>
+        <div class="summary" id="last-job-summary">{{ state.last_job_summary | tojson(indent=2) }}</div>
       </section>
 
       <section class="card">
@@ -303,11 +306,11 @@
         <div class="stats">
           <div class="stat">
             <span class="label">已上传总数</span>
-            <span class="value">{{ uploaded_songs|length }}</span>
+            <span class="value" id="uploaded-count">{{ uploaded_songs|length }}</span>
           </div>
         </div>
         <div class="listbox">
-          <ul>
+          <ul id="uploaded-songs-list">
             {% for song in uploaded_songs %}
               <li>{{ song }}</li>
             {% else %}
@@ -323,11 +326,11 @@
         <div class="stats">
           <div class="stat">
             <span class="label">失败总数</span>
-            <span class="value">{{ failed_songs|length }}</span>
+            <span class="value" id="failed-count">{{ failed_songs|length }}</span>
           </div>
         </div>
         <div class="listbox">
-          <ul>
+          <ul id="failed-songs-list">
             {% for song, reason in failed_songs.items() %}
               <li>{{ song }} | {{ reason }}</li>
             {% else %}
@@ -339,10 +342,80 @@
 
       <section class="card">
         <h2>运行日志</h2>
-        <div class="mono">{% for line in logs %}{{ line }}
+        <div class="mono" id="runtime-logs">{% for line in logs %}{{ line }}
 {% endfor %}</div>
       </section>
     </div>
   </div>
+  <script>
+    function setResultClass(element, result) {
+      element.classList.remove("status-success", "status-failed", "status-idle");
+      if (result === "success") {
+        element.classList.add("status-success");
+      } else if (result === "failed") {
+        element.classList.add("status-failed");
+      } else {
+        element.classList.add("status-idle");
+      }
+    }
+
+    function renderList(targetId, items, emptyText) {
+      const target = document.getElementById(targetId);
+      target.innerHTML = "";
+      if (!items.length) {
+        const li = document.createElement("li");
+        li.textContent = emptyText;
+        target.appendChild(li);
+        return;
+      }
+      for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        target.appendChild(li);
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+
+        document.getElementById("started-at").textContent = data.state.started_at || "未执行";
+        document.getElementById("current-job").textContent = data.state.current_job || "空闲";
+        document.getElementById("current-job").classList.toggle("job-running", Boolean(data.state.job_running));
+        document.getElementById("last-job-result").textContent = data.state.last_job_result || "未执行";
+        setResultClass(document.getElementById("last-job-result"), data.state.last_job_result || "");
+        document.getElementById("last-auto-run-date").textContent = data.state.last_auto_run_date || "未执行";
+        document.getElementById("last-git-sync-at").textContent = data.state.last_git_sync_at || "未执行";
+        document.getElementById("server-status").textContent = data.server_status.message || "未知";
+        document.getElementById("server-status").classList.remove("status-success", "status-failed");
+        document.getElementById("server-status").classList.add(data.server_status.ok ? "status-success" : "status-failed");
+        document.getElementById("server-song-count").textContent = String(data.server_status.song_count ?? 0);
+        document.getElementById("last-job-started-at").textContent = data.state.last_job_started_at || "未执行";
+        document.getElementById("last-job-finished-at").textContent = data.state.last_job_finished_at || "未执行";
+        document.getElementById("last-error").textContent = data.state.last_error || "无";
+        document.getElementById("last-job-summary").textContent = JSON.stringify(data.state.last_job_summary || {}, null, 2);
+
+        let repoStatus = "首次部署将自动 clone";
+        if (data.repo_is_git) repoStatus = "已就绪";
+        else if (data.repo_exists) repoStatus = "目录存在但不是 Git 仓库";
+        document.getElementById("repo-status").textContent = repoStatus;
+
+        document.getElementById("uploaded-count").textContent = String((data.uploaded_songs || []).length);
+        document.getElementById("failed-count").textContent = String(Object.keys(data.failed_songs || {}).length);
+        renderList("uploaded-songs-list", data.uploaded_songs || [], "暂无已上传记录");
+        renderList("failed-songs-list", Object.entries(data.failed_songs || {}).map(([song, reason]) => `${song} | ${reason}`), "暂无失败记录");
+
+        const logs = (data.logs || []).join("\n");
+        document.getElementById("runtime-logs").textContent = logs;
+      } catch (error) {
+        console.error("刷新状态失败", error);
+      }
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 3000);
+  </script>
 </body>
 </html>

@@ -90,23 +90,28 @@ class SyncService:
 
     def _run_command(self, args: list[str], cwd: pathlib.Path | None = None) -> None:
         self._log(f"执行命令: {' '.join(args)}")
-        completed = subprocess.run(
+        process = subprocess.Popen(
             args,
             cwd=str(cwd) if cwd else None,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
-            check=False,
+            bufsize=1,
         )
-        if completed.stdout.strip():
-            for line in completed.stdout.splitlines():
-                self._log(f"stdout: {line}")
-        if completed.stderr.strip():
-            for line in completed.stderr.splitlines():
-                self._log(f"stderr: {line}")
-        if completed.returncode != 0:
-            raise RuntimeError(f"命令失败，退出码 {completed.returncode}: {' '.join(args)}")
+
+        assert process.stdout is not None
+        for raw_line in process.stdout:
+            normalized = raw_line.replace("\r", "\n")
+            for line in normalized.splitlines():
+                line = line.strip()
+                if line:
+                    self._log(f"output: {line}")
+
+        return_code = process.wait()
+        if return_code != 0:
+            raise RuntimeError(f"命令失败，退出码 {return_code}: {' '.join(args)}")
 
     def _git_command(self) -> str:
         detected = shutil.which("git")
@@ -136,12 +141,12 @@ class SyncService:
 
         if not repo_dir.exists():
             self._log(f"本地仓库不存在，开始 clone 到 {repo_dir}")
-            self._run_command([git_cmd, "clone", self.config.repo_url, str(repo_dir)])
+            self._run_command([git_cmd, "clone", "--progress", self.config.repo_url, str(repo_dir)])
         elif not (repo_dir / ".git").exists():
             raise RuntimeError(f"目录存在但不是 git 仓库: {repo_dir}")
         else:
             self._log(f"开始 pull 仓库: {repo_dir}")
-            self._run_command([git_cmd, "-C", str(repo_dir), "pull", "--ff-only"])
+            self._run_command([git_cmd, "-C", str(repo_dir), "pull", "--progress", "--ff-only"])
 
         self.state["last_git_sync_at"] = self._now()
 
