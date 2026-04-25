@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taiko 自动同步上传面板</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --paper: #fffaf2;
+      --ink: #1f2430;
+      --accent: #c7512c;
+      --accent-dark: #8d3117;
+      --line: #dbcdb5;
+      --ok: #23734d;
+      --warn: #9a5a00;
+      --bad: #a22727;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #ffe6b8 0, transparent 28%),
+        radial-gradient(circle at bottom right, #ffd4c8 0, transparent 24%),
+        linear-gradient(135deg, #efe6d6, var(--bg));
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .hero {
+      background: linear-gradient(135deg, rgba(199,81,44,.95), rgba(141,49,23,.92));
+      color: #fff;
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 18px 40px rgba(87, 42, 18, 0.18);
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+    }
+    .hero p {
+      margin: 0;
+      opacity: .92;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      background: rgba(255,250,242,.95);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 26px rgba(88, 67, 31, 0.08);
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 20px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .stat {
+      padding: 12px;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid #eadfc9;
+    }
+    .label {
+      display: block;
+      color: #6a665d;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .value {
+      font-weight: 700;
+      word-break: break-word;
+    }
+    form {
+      margin: 0;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .field label {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="time"] {
+      width: 100%;
+      border: 1px solid #d8c8aa;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 15px;
+      background: #fffdfa;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      transition: transform .15s ease, background .15s ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      background: var(--accent-dark);
+    }
+    .secondary {
+      background: #7e6a43;
+    }
+    .secondary:hover {
+      background: #5d4d31;
+    }
+    .status-success { color: var(--ok); }
+    .status-failed { color: var(--bad); }
+    .status-idle { color: var(--warn); }
+    .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid #eadfc9;
+      padding: 14px;
+      max-height: 520px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .summary {
+      background: #fff;
+      border: 1px solid #eadfc9;
+      border-radius: 14px;
+      padding: 12px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Taiko 自动同步上传面板</h1>
+      <p>默认运行在 80 端口，用来管理 ESE 仓库同步、歌曲上传、缺失扫描和每日定时任务。</p>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>当前状态</h2>
+        <div class="stats">
+          <div class="stat">
+            <span class="label">服务启动时间</span>
+            <span class="value">{{ state.started_at }}</span>
+          </div>
+          <div class="stat">
+            <span class="label">运行中任务</span>
+            <span class="value">{{ state.current_job or "空闲" }}</span>
+          </div>
+          <div class="stat">
+            <span class="label">上次任务结果</span>
+            <span class="value {% if state.last_job_result == 'success' %}status-success{% elif state.last_job_result == 'failed' %}status-failed{% else %}status-idle{% endif %}">
+              {{ state.last_job_result or "未执行" }}
+            </span>
+          </div>
+          <div class="stat">
+            <span class="label">上次自动执行日期</span>
+            <span class="value">{{ state.last_auto_run_date or "未执行" }}</span>
+          </div>
+          <div class="stat">
+            <span class="label">上次仓库同步</span>
+            <span class="value">{{ state.last_git_sync_at or "未执行" }}</span>
+          </div>
+          <div class="stat">
+            <span class="label">仓库状态</span>
+            <span class="value">
+              {% if repo_is_git %}
+                已就绪
+              {% elif repo_exists %}
+                目录存在但不是 Git 仓库
+              {% else %}
+                首次部署将自动 clone
+              {% endif %}
+            </span>
+          </div>
+        </div>
+        <p><strong>上次开始:</strong> {{ state.last_job_started_at or "未执行" }}</p>
+        <p><strong>上次结束:</strong> {{ state.last_job_finished_at or "未执行" }}</p>
+        <p><strong>最近错误:</strong> {{ state.last_error or "无" }}</p>
+        <div class="summary">{{ state.last_job_summary | tojson(indent=2) }}</div>
+      </section>
+
+      <section class="card">
+        <h2>操作面板</h2>
+        <div class="row">
+          <form method="post" action="{{ url_for('run_action', target='sync_upload') }}">
+            <button type="submit">立即同步并上传</button>
+          </form>
+          <form method="post" action="{{ url_for('run_action', target='pull') }}">
+            <button type="submit" class="secondary">仅执行 clone/pull</button>
+          </form>
+          <form method="post" action="{{ url_for('run_action', target='upload') }}">
+            <button type="submit" class="secondary">仅执行上传</button>
+          </form>
+          <form method="post" action="{{ url_for('run_action', target='scan') }}">
+            <button type="submit" class="secondary">扫描站点缺失</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>基础配置</h2>
+        <form method="post" action="{{ url_for('save_config_route') }}">
+          <div class="form-grid">
+            <div class="field">
+              <label>Git 仓库地址</label>
+              <input type="text" name="repo_url" value="{{ config.repo_url }}">
+            </div>
+            <div class="field">
+              <label>本地 ESE 目录</label>
+              <input type="text" name="repo_dir" value="{{ config.repo_dir }}">
+            </div>
+            <div class="field">
+              <label>上传站点 URL</label>
+              <input type="text" name="site_url" value="{{ config.site_url }}">
+            </div>
+            <div class="field">
+              <label>每日自动执行时间</label>
+              <input type="time" name="daily_time" value="{{ config.daily_time }}">
+            </div>
+            <div class="field">
+              <label>监听地址</label>
+              <input type="text" name="listen_host" value="{{ config.listen_host }}">
+            </div>
+            <div class="field">
+              <label>监听端口</label>
+              <input type="number" name="listen_port" value="{{ config.listen_port }}">
+            </div>
+            <div class="field">
+              <label><input type="checkbox" name="use_proxy" {% if config.use_proxy %}checked{% endif %}> 上传和扫描时使用 127.0.0.1:10808 代理</label>
+            </div>
+            <div class="row">
+              <button type="submit">保存配置</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>运行日志</h2>
+        <div class="mono">{% for line in logs %}{{ line }}
+{% endfor %}</div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>
