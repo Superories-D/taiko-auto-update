@@ -1,5 +1,6 @@
 import json
 import pathlib
+import shutil
 import subprocess
 import threading
 import time
@@ -107,6 +108,17 @@ class SyncService:
         if completed.returncode != 0:
             raise RuntimeError(f"命令失败，退出码 {completed.returncode}: {' '.join(args)}")
 
+    def _git_command(self) -> str:
+        detected = shutil.which("git")
+        if detected:
+            return detected
+
+        for candidate in ("/usr/bin/git", "/usr/local/bin/git", "/bin/git"):
+            if pathlib.Path(candidate).exists():
+                return candidate
+
+        raise RuntimeError("未找到 git。请先安装 git，或确认 systemd 服务 PATH 包含 /usr/bin。")
+
     def get_server_status(self) -> dict[str, Any]:
         try:
             songs = fetch_server_songs(self.config.site_url, use_proxy=self.config.use_proxy)
@@ -120,15 +132,16 @@ class SyncService:
         repo_dir = pathlib.Path(self.config.repo_dir)
         parent_dir = repo_dir.parent
         parent_dir.mkdir(parents=True, exist_ok=True)
+        git_cmd = self._git_command()
 
         if not repo_dir.exists():
             self._log(f"本地仓库不存在，开始 clone 到 {repo_dir}")
-            self._run_command(["git", "clone", self.config.repo_url, str(repo_dir)])
+            self._run_command([git_cmd, "clone", self.config.repo_url, str(repo_dir)])
         elif not (repo_dir / ".git").exists():
             raise RuntimeError(f"目录存在但不是 git 仓库: {repo_dir}")
         else:
             self._log(f"开始 pull 仓库: {repo_dir}")
-            self._run_command(["git", "-C", str(repo_dir), "pull", "--ff-only"])
+            self._run_command([git_cmd, "-C", str(repo_dir), "pull", "--ff-only"])
 
         self.state["last_git_sync_at"] = self._now()
 

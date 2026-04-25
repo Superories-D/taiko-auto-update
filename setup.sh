@@ -85,7 +85,7 @@ Type=simple
 User=${APP_USER}
 Group=${APP_GROUP}
 WorkingDirectory=${APP_DIR}
-Environment="PATH=${APP_DIR}/.venv/bin"
+Environment="PATH=${APP_DIR}/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=${APP_DIR}/.venv/bin/gunicorn -w 2 -b ${GUNICORN_BIND} wsgi:app
 Restart=always
 RestartSec=5
