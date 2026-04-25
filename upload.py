@@ -20,6 +20,7 @@ class UploadSummary:
     scanned: int = 0
     uploaded: int = 0
     skipped_uploaded: int = 0
+    skipped_failed: int = 0
     skipped_missing_tja: int = 0
     skipped_missing_ogg: int = 0
     failed: int = 0
@@ -31,6 +32,7 @@ class UploadSummary:
             "scanned": self.scanned,
             "uploaded": self.uploaded,
             "skipped_uploaded": self.skipped_uploaded,
+            "skipped_failed": self.skipped_failed,
             "skipped_missing_tja": self.skipped_missing_tja,
             "skipped_missing_ogg": self.skipped_missing_ogg,
             "failed": self.failed,
@@ -106,6 +108,10 @@ def _uploaded_file_path() -> pathlib.Path:
     return pathlib.Path(__file__).resolve().parent / "uploaded.json"
 
 
+def _failed_file_path() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parent / "upload_failed.json"
+
+
 def _load_uploaded_set(path: pathlib.Path) -> set[str]:
     try:
         with path.open("r", encoding="utf-8") as handle:
@@ -118,9 +124,26 @@ def _load_uploaded_set(path: pathlib.Path) -> set[str]:
     return set()
 
 
+def _load_failed_map(path: pathlib.Path) -> Dict[str, str]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        failed = payload.get("failed")
+        if isinstance(failed, dict):
+            return {str(key): str(value) for key, value in failed.items()}
+    except Exception:
+        pass
+    return {}
+
+
 def _save_uploaded_set(path: pathlib.Path, uploaded: Iterable[str]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump({"uploaded": sorted(set(uploaded))}, handle, ensure_ascii=False, indent=2)
+
+
+def _save_failed_map(path: pathlib.Path, failed: Dict[str, str]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump({"failed": dict(sorted(failed.items()))}, handle, ensure_ascii=False, indent=2)
 
 
 def _build_upload_url(base_url: str) -> str:
@@ -225,7 +248,9 @@ def run_upload(
     summary = UploadSummary(mode=mode)
     upload_url = _build_upload_url(site_url)
     uploaded_path = _uploaded_file_path()
+    failed_path = _failed_file_path()
     uploaded_set = _load_uploaded_set(uploaded_path)
+    failed_map = _load_failed_map(failed_path)
 
     ese_dir = pathlib.Path(ese_path) if ese_path else pathlib.Path(__file__).resolve().parent / "ESE"
     if not ese_dir.exists() or not ese_dir.is_dir():
@@ -266,6 +291,11 @@ def run_upload(
                 _emit(f"[跳过] 已上传: {key}", progress)
                 continue
 
+            if key in failed_map:
+                summary.skipped_failed += 1
+                _emit(f"[跳过] 历史上传失败: {key} -> {failed_map[key]}", progress)
+                continue
+
             tja_path = _find_first_with_ext(song_dir, ".tja")
             if tja_path is None:
                 summary.skipped_missing_tja += 1
@@ -281,17 +311,28 @@ def run_upload(
             ok, message = _upload_song(upload_url, song_type, tja_path, music_path, use_proxy)
             if ok:
                 uploaded_set.add(key)
+                failed_map.pop(key, None)
                 summary.uploaded += 1
                 _emit(f"[成功] 已上传: {key}", progress)
             else:
+                failed_map[key] = message
                 summary.failed += 1
                 _emit(f"[失败] {key} -> {message}", progress)
 
     if mode != "scan":
         _save_uploaded_set(uploaded_path, uploaded_set)
+        _save_failed_map(failed_path, failed_map)
 
     _emit(f"任务完成: {json.dumps(summary.to_dict(), ensure_ascii=False)}", progress)
     return summary.to_dict()
+
+
+def get_uploaded_songs() -> list[str]:
+    return sorted(_load_uploaded_set(_uploaded_file_path()))
+
+
+def get_failed_songs() -> Dict[str, str]:
+    return _load_failed_map(_failed_file_path())
 
 
 def main() -> None:

@@ -10,12 +10,13 @@ from typing import Any
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
-from upload import run_upload
+from upload import fetch_server_songs, get_failed_songs, get_uploaded_songs, run_upload
 
 
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "panel_config.json"
 LOG_PATH = BASE_DIR / "panel.log"
+FAILED_PATH = BASE_DIR / "upload_failed.json"
 
 
 @dataclass
@@ -61,12 +62,18 @@ class SyncService:
 
     def snapshot(self) -> dict[str, Any]:
         repo_path = pathlib.Path(self.config.repo_dir)
+        server_status = self.get_server_status()
+        uploaded_songs = get_uploaded_songs()
+        failed_songs = get_failed_songs()
         return {
             "config": asdict(self.config),
             "state": dict(self.state),
             "logs": list(self.logs),
             "repo_exists": repo_path.exists(),
             "repo_is_git": (repo_path / ".git").exists(),
+            "server_status": server_status,
+            "uploaded_songs": uploaded_songs,
+            "failed_songs": failed_songs,
         }
 
     def update_config(self, form: dict[str, str]) -> None:
@@ -99,6 +106,15 @@ class SyncService:
                 self._log(f"stderr: {line}")
         if completed.returncode != 0:
             raise RuntimeError(f"命令失败，退出码 {completed.returncode}: {' '.join(args)}")
+
+    def get_server_status(self) -> dict[str, Any]:
+        try:
+            songs = fetch_server_songs(self.config.site_url, use_proxy=self.config.use_proxy)
+            if songs is None:
+                return {"ok": False, "message": "站点不可达或歌曲接口不可用", "song_count": 0}
+            return {"ok": True, "message": "站点连接正常", "song_count": len(songs)}
+        except Exception as exc:
+            return {"ok": False, "message": str(exc), "song_count": 0}
 
     def ensure_repo_ready(self) -> None:
         repo_dir = pathlib.Path(self.config.repo_dir)
@@ -232,6 +248,10 @@ class SyncService:
         thread.start()
         return True
 
+    def clear_failed_marks(self) -> None:
+        FAILED_PATH.write_text('{"failed": {}}\n', encoding="utf-8")
+        self._log("已清空失败标记，后续可以重新尝试上传失败歌曲。")
+
     def _scheduler_loop(self) -> None:
         while True:
             try:
@@ -290,6 +310,12 @@ def run_action(target: str):
 
     accepted = service.trigger_background(target)
     return redirect(url_for("index")) if accepted else redirect(url_for("index"))
+
+
+@app.post("/action/clear-failed")
+def clear_failed():
+    service.clear_failed_marks()
+    return redirect(url_for("index"))
 
 
 if __name__ == "__main__":

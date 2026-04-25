@@ -149,6 +149,22 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .listbox {
+      background: #fff;
+      border: 1px solid #eadfc9;
+      border-radius: 14px;
+      padding: 14px;
+      max-height: 420px;
+      overflow: auto;
+    }
+    .listbox ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .listbox li {
+      margin: 0 0 6px;
+      word-break: break-word;
+    }
     .summary {
       background: #fff;
       border: 1px solid #eadfc9;
@@ -205,6 +221,16 @@
               {% endif %}
             </span>
           </div>
+          <div class="stat">
+            <span class="label">服务器状态</span>
+            <span class="value {% if server_status.ok %}status-success{% else %}status-failed{% endif %}">
+              {{ server_status.message }}
+            </span>
+          </div>
+          <div class="stat">
+            <span class="label">服务器歌曲数</span>
+            <span class="value">{{ server_status.song_count }}</span>
+          </div>
         </div>
         <p><strong>上次开始:</strong> {{ state.last_job_started_at or "未执行" }}</p>
         <p><strong>上次结束:</strong> {{ state.last_job_finished_at or "未执行" }}</p>
@@ -226,6 +252,9 @@
           </form>
           <form method="post" action="{{ url_for('run_action', target='scan') }}">
             <button type="submit" class="secondary">扫描站点缺失</button>
+          </form>
+          <form method="post" action="{{ url_for('clear_failed') }}">
+            <button type="submit" class="secondary">清空失败标记</button>
           </form>
         </div>
       </section>
@@ -266,6 +295,46 @@
             </div>
           </div>
         </form>
+      </section>
+
+      <section class="card">
+        <h2>已上传歌曲</h2>
+        <p>初始列表来自仓库里的 <code>uploaded.json</code>，后续每次成功上传也会自动追加到这里。</p>
+        <div class="stats">
+          <div class="stat">
+            <span class="label">已上传总数</span>
+            <span class="value">{{ uploaded_songs|length }}</span>
+          </div>
+        </div>
+        <div class="listbox">
+          <ul>
+            {% for song in uploaded_songs %}
+              <li>{{ song }}</li>
+            {% else %}
+              <li>暂无已上传记录</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>上传失败歌曲</h2>
+        <p>失败歌曲会被自动标记并在后续任务中跳过，避免反复卡住同一首。</p>
+        <div class="stats">
+          <div class="stat">
+            <span class="label">失败总数</span>
+            <span class="value">{{ failed_songs|length }}</span>
+          </div>
+        </div>
+        <div class="listbox">
+          <ul>
+            {% for song, reason in failed_songs.items() %}
+              <li>{{ song }} | {{ reason }}</li>
+            {% else %}
+              <li>暂无失败记录</li>
+            {% endfor %}
+          </ul>
+        </div>
       </section>
 
       <section class="card">

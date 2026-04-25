@@ -2,5 +2,5 @@ __pycache__/
 *.pyc
 panel.log
 panel_config.json
-uploaded.json
 ESE/
+upload_failed.json
