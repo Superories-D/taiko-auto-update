@@ -53,6 +53,7 @@ Ubuntu 版推荐使用：
 已提供的部署文件：
 
 - [wsgi.py](d:\DMH_Files\Python_projects\taiko-update2\wsgi.py)
+- [setup.sh](d:\DMH_Files\Python_projects\taiko-update2\setup.sh)
 - [deploy/ubuntu/install_ubuntu.sh](d:\DMH_Files\Python_projects\taiko-update2\deploy\ubuntu\install_ubuntu.sh)
 - [deploy/ubuntu/taiko-sync-panel.service](d:\DMH_Files\Python_projects\taiko-update2\deploy\ubuntu\taiko-sync-panel.service)
 - [deploy/ubuntu/taiko-sync-panel.nginx.conf](d:\DMH_Files\Python_projects\taiko-update2\deploy\ubuntu\taiko-sync-panel.nginx.conf)
@@ -63,8 +64,8 @@ Ubuntu 版推荐使用：
 
 ```bash
 cd /root/taiko-update2
-chmod +x deploy/ubuntu/install_ubuntu.sh
-./deploy/ubuntu/install_ubuntu.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 脚本会自动：
@@ -75,6 +76,19 @@ chmod +x deploy/ubuntu/install_ubuntu.sh
 - 安装 `systemd` 服务
 - 安装 `nginx` 配置
 - 启动面板并占用 `80` 端口
+
+### setup.sh 可选环境变量
+
+如果你要改默认部署位置或域名，可以这样执行：
+
+```bash
+APP_DIR=/opt/taiko-update2 \
+NGINX_SERVER_NAME=example.com \
+SITE_URL=https://taiko.asia \
+REPO_URL=https://ese.tjadataba.se/ESE/ESE.git \
+DAILY_TIME=03:00 \
+./setup.sh
+```
 
 ### Ubuntu 常用命令
 
